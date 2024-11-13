@@ -7,6 +7,9 @@ TagManager:
   - CinemachineTarget
   - Wall
   - Ground
+  - Robot
+  - Object
+  - Target
   layers:
   - Default
   - TransparentFX
