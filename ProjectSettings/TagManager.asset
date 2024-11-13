@@ -11,13 +11,13 @@ TagManager:
   - Default
   - TransparentFX
   - Ignore Raycast
-  - 
+  - Floor
   - Water
   - UI
-  - 
-  - 
-  - 
-  - 
+  - Shelves
+  - Objects
+  - Robot
+  - Walls
   - 
   - 
   - 
@@ -43,4 +43,19 @@ TagManager:
   m_SortingLayers:
   - name: Default
     uniqueID: 0
+    locked: 0
+  - name: Floor
+    uniqueID: 2804585483
+    locked: 0
+  - name: Walls
+    uniqueID: 1731503567
+    locked: 0
+  - name: Shelves
+    uniqueID: 1808457105
+    locked: 0
+  - name: Objects
+    uniqueID: 1630804709
+    locked: 0
+  - name: Robot
+    uniqueID: 3310061943
     locked: 0
