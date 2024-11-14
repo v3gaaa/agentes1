@@ -13,9 +13,9 @@ public class ObjectSpawner : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        SpawnObjects(barrelPrefab, 7);
-        SpawnObjects(crateShortPrefab, 7);
-        SpawnObjects(crateLongPrefab, 7);
+        SpawnObjects(barrelPrefab, 3);
+        SpawnObjects(crateShortPrefab, 3);
+        SpawnObjects(crateLongPrefab, 3);
     }
 
     void SpawnObjects(GameObject prefab, int count)
@@ -24,7 +24,7 @@ public class ObjectSpawner : MonoBehaviour
         {
             Vector3 randomPosition = new Vector3(
                 Random.Range(spawnAreaMin.x, spawnAreaMax.x),
-                Random.Range(spawnAreaMin.y, spawnAreaMax.y),
+                spawnAreaMin.y, // Keep Y constant
                 Random.Range(spawnAreaMin.z, spawnAreaMax.z)
             );
             Instantiate(prefab, randomPosition, Quaternion.identity);

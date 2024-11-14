@@ -7,83 +7,146 @@ public class RobotAgent : MonoBehaviour
 {
     public float speed = 5f; // Robot movement speed
     public Transform stackLocation; // Stack location to drop objects
-    public int maxObjectsInStack = 5; // Max objects per stack
+    private NavMeshAgent navAgent; // The NavMeshAgent for pathfinding
+    private bool isYielding = false; // Flag to check if robot is yielding
+    private float backupTime = 2f; // Duration for the robot to back up
+    private Animator robotAnimator; // Animator component
     private bool carryingObject = false; // Is the robot carrying an object?
     private GameObject objectInHand = null; // The object the robot is carrying
-    private NavMeshAgent navAgent; // The NavMeshAgent for pathfinding
     private int objectCount = 0; // Current count of objects in the stack
-    private float rotationSpeed = 100f; // Speed of robot rotation
-    private bool isYielding = false; // Flag to check if robot is yielding
-    private Transform targetObject; // The target object the robot is moving towards
-    private float backupTime = 2f; // Duration for the robot to back up
-    private float detectionRange = 10f; // Range within which the robot can detect objects
 
     // Start is called before the first frame update
     void Start()
     {
         navAgent = GetComponent<NavMeshAgent>();
+        robotAnimator = GetComponent<Animator>();
         navAgent.speed = speed;
-        // Example: Set a target (for demonstration purposes, you should have your own target logic)
-        GameObject target = GameObject.FindGameObjectWithTag("Target");
-        if (target != null)
-        {
-            targetObject = target.transform;
-            navAgent.SetDestination(targetObject.position);
-        }
-        else
-        {
-            Debug.LogWarning("Target object not found. Please ensure there is a GameObject with the tag 'Target' in the scene.");
-        }
+        StartCoroutine(GetNextAction());
     }
 
     // Update is called once per frame
     void Update()
     {
-        if (targetObject != null && navAgent.isOnNavMesh)
+        // Handle any continuous updates if needed
+    }
+
+    // Get the next action from the Python server
+    IEnumerator GetNextAction()
+    {
+        while (true)
         {
-            navAgent.SetDestination(targetObject.position);
+            using (UnityWebRequest www = UnityWebRequest.Get("http://localhost:5000/next_action"))
+            {
+                yield return www.SendWebRequest();
+
+                if (www.result == UnityWebRequest.Result.Success)
+                {
+                    string action = www.downloadHandler.text.Trim().Trim('"'); // Remove quotes and trim whitespace
+                    Debug.Log("Received action: " + action);
+                    PerformAction(action);
+                }
+                else
+                {
+                    Debug.LogError("Error getting next action: " + www.error);
+                }
+            }
+
+            yield return new WaitForSeconds(1f); // Wait for a short duration before getting the next action
         }
     }
 
-    // Detect nearby objects, robots, and walls
-    void DetectSurroundings()
+    // Perform an action based on the server's response
+    void PerformAction(string action)
     {
-        RaycastHit hit;
-        if (Physics.Raycast(transform.position, transform.forward, out hit, detectionRange))
+        Debug.Log("Performing action: " + action);
+        switch (action)
         {
-            if (hit.collider.CompareTag("Object"))
-            {
-                PickUpObject(hit.collider.gameObject);
-            }
-            else if (hit.collider.CompareTag("Robot"))
-            {
-                HandleCollision(hit.collider.gameObject);
-            }
-            else if (hit.collider.CompareTag("Wall"))
-            {
-                AvoidWall();
-            }
+            case "move_forward":
+                MoveForward();
+                break;
+            case "rotate":
+                RotateRobotTowardsTarget();
+                break;
+            case "stop":
+                navAgent.isStopped = true;
+                break;
+            case "resume":
+                navAgent.isStopped = false;
+                break;
+            default:
+                Debug.LogWarning("Unknown action: " + action);
+                break;
         }
     }
 
     // Move robot forward
     void MoveForward()
     {
-        if (!carryingObject)
-        {
-            navAgent.Move(transform.forward * speed * Time.deltaTime);
-        }
+        Debug.Log("Moving forward");
+        navAgent.Move(transform.forward * speed * Time.deltaTime);
     }
 
     // Rotate robot to face the target object
     void RotateRobotTowardsTarget()
     {
-        if (objectInHand != null)
+        Debug.Log("Rotating towards target");
+        // Example rotation logic (you can customize this)
+        Vector3 direction = stackLocation.position - transform.position;
+        direction.y = 0; // Keep rotation on the y-axis only
+        Quaternion toRotation = Quaternion.LookRotation(direction);
+        transform.rotation = Quaternion.RotateTowards(transform.rotation, toRotation, speed * Time.deltaTime);
+        robotAnimator.SetTrigger("Turn"); // Set the Turn trigger
+    }
+
+    // Pick up an object
+    void PickUpObject(GameObject obj)
+    {
+        if (!carryingObject)
         {
-            Vector3 direction = objectInHand.transform.position - transform.position;
-            direction.y = 0; // Keep rotation on the y-axis only
-            Quaternion toRotation = Quaternion.LookRotation(direction);
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, toRotation, rotationSpeed * Time.deltaTime);
+            Debug.Log("Picking up object: " + obj.name);
+            objectInHand = obj;
+            carryingObject = true;
+            obj.transform.SetParent(transform);
+            obj.transform.localPosition = new Vector3(0, 1, 0);
+            robotAnimator.SetTrigger("PickUp");
+            StartCoroutine(SendDataToServer("PickUp"));
+        }
+    }
+
+    // Drop the object at a stack location
+    void DropObject()
+    {
+        if (carryingObject && objectInHand != null)
+        {
+            Debug.Log("Dropping object: " + objectInHand.name);
+            objectInHand.transform.SetParent(null);
+            objectInHand.transform.position = stackLocation.position;
+            carryingObject = false;
+            objectInHand = null;
+            objectCount++;
+            robotAnimator.SetTrigger("Drop");
+            StartCoroutine(SendDataToServer("Drop"));
+        }
+    }
+
+    // Send data to the Python server
+    IEnumerator SendDataToServer(string action)
+    {
+        WWWForm form = new WWWForm();
+        form.AddField("robot_action", action);
+
+        using (UnityWebRequest www = UnityWebRequest.Post("http://localhost:5000/robot_action", form))
+        {
+            yield return www.SendWebRequest();
+
+            if (www.result == UnityWebRequest.Result.Success)
+            {
+                Debug.Log("Data sent successfully: " + action);
+            }
+            else
+            {
+                Debug.LogError("Error sending data: " + www.error);
+            }
         }
     }
 
@@ -102,108 +165,19 @@ public class RobotAgent : MonoBehaviour
     // Back up the robot when collision is detected
     IEnumerator BackUp(GameObject otherRobot)
     {
+        Debug.Log("Backing up");
         transform.Translate(Vector3.back * Time.deltaTime * speed);
         yield return new WaitForSeconds(backupTime); // Backup for a set duration
-
-        // After backup, resume movement
         isYielding = false;
-        navAgent.isStopped = false;
+        navAgent.isStopped = false; // Resume robot movement
     }
 
-    // Avoid wall by changing direction or stopping
-    void AvoidWall()
+    // Handle collision with the target
+    void OnCollisionEnter(Collision collision)
     {
-        Debug.Log("Wall detected. Adjusting path.");
-        navAgent.isStopped = true;
-        // Implement additional logic here to change direction or find a new path around obstacles
-    }
-
-    // Pick up an object (only one object at a time)
-    void PickUpObject(GameObject obj)
-    {
-        if (!carryingObject)
+        if (collision.gameObject.CompareTag("Target"))
         {
-            Debug.Log("Picking up object: " + obj.name);
-            objectInHand = obj;
-            carryingObject = true;
-            obj.transform.SetParent(transform); // Attach the object to the robot
-            obj.transform.localPosition = new Vector3(0, 1, 0); // Position it in front of the robot
-        }
-    }
-
-    // Drop the object at a stack location
-    void DropObject()
-    {
-        if (carryingObject && objectInHand != null)
-        {
-            Debug.Log("Dropping object: " + objectInHand.name);
-            objectInHand.transform.SetParent(null); // Detach object from robot
-            objectInHand.transform.position = stackLocation.position; // Place at stack location
-            carryingObject = false;
-            objectInHand = null;
-            objectCount++;
-
-            if (objectCount >= maxObjectsInStack)
-            {
-                Debug.Log("Stack limit reached! Sending robot to a new task.");
-            }
-        }
-    }
-
-    // Communicate robot actions to the Python server
-    IEnumerator SendDataToServer(string robotAction)
-    {
-        WWWForm form = new WWWForm();
-        form.AddField("robot_action", robotAction);  // Example data (you can send more details)
-
-        using (UnityWebRequest www = UnityWebRequest.Post("http://localhost:5000/step", form))
-        {
-            yield return www.SendWebRequest();
-
-            if (www.result == UnityWebRequest.Result.Success)
-            {
-                Debug.Log("Data sent successfully: " + robotAction);
-            }
-            else
-            {
-                Debug.LogError("Error sending data: " + www.error);
-            }
-        }
-    }
-
-    // Process the server response and act accordingly
-    void ProcessServerResponse(string response)
-    {
-        // Implement logic to move or drop objects based on response from the server
-        if (response.Contains("move"))
-        {
-            Vector3 newPos = new Vector3(5, 0, 5);  // Example position, could be returned from Python
-            MoveToPosition(newPos);
-        }
-
-        if (response.Contains("drop"))
-        {
-            DropObject();
-        }
-    }
-
-    public void MoveToPosition(Vector3 position)
-    {
-        navAgent.SetDestination(position);
-    }
-
-    // Perform an action (e.g., pick up or drop an object)
-    public void PerformAction(string action)
-    {
-        switch (action)
-        {
-            case "pickup":
-                break;
-            case "drop":
-                DropObject();
-                break;
-            case "move":
-                break;
+            Debug.Log("Collided with target: " + collision.gameObject.name);
         }
     }
 }
