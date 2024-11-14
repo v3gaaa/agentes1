@@ -66,7 +66,7 @@ def step():
 def next_action():
     # Determine the next action for the robot
     # This is a simplified example, you can implement more complex logic
-    actions = ["move_forward", "rotate", "stop", "resume"]
+    actions = ["move_forward", "rotate", "stop", "resume", "turn"]
     action = random.choice(actions)
     return jsonify(action)
 
@@ -77,7 +77,7 @@ def robot_pickup():
     print(f"Robot {robot_id} picks up object")
     return jsonify({"status": "success", "action": "pickup"})
 
-@app.route('/robot/drop', methods=['POST'])
+@app.route('/robot/drop', methods = ['POST'])
 def robot_drop():
     data = request.json
     robot_id = data['robot_id']

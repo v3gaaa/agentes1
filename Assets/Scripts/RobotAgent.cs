@@ -42,7 +42,7 @@ public class RobotAgent : MonoBehaviour
                 if (www.result == UnityWebRequest.Result.Success)
                 {
                     string action = www.downloadHandler.text.Trim().Trim('"'); // Remove quotes and trim whitespace
-                    Debug.Log("Received action: " + action);
+                    Debug.Log("Agent: " + gameObject.name + ", Target Position: " + stackLocation.position);
                     PerformAction(action);
                 }
                 else
@@ -58,7 +58,7 @@ public class RobotAgent : MonoBehaviour
     // Perform an action based on the server's response
     void PerformAction(string action)
     {
-        Debug.Log("Performing action: " + action);
+        //Debug.Log("Performing action: " + action);
         switch (action)
         {
             case "move_forward":
@@ -73,6 +73,9 @@ public class RobotAgent : MonoBehaviour
             case "resume":
                 navAgent.isStopped = false;
                 break;
+            case "turn":
+                Turn();
+                break;
             default:
                 Debug.LogWarning("Unknown action: " + action);
                 break;
@@ -82,19 +85,28 @@ public class RobotAgent : MonoBehaviour
     // Move robot forward
     void MoveForward()
     {
-        Debug.Log("Moving forward");
-        navAgent.Move(transform.forward * speed * Time.deltaTime);
+        //Debug.Log("Moving forward");
+        navAgent.Move(transform.forward * speed * Time.deltaTime * 10);
     }
 
     // Rotate robot to face the target object
     void RotateRobotTowardsTarget()
     {
-        Debug.Log("Rotating towards target");
+        //Debug.Log("Rotating towards target");
         // Example rotation logic (you can customize this)
         Vector3 direction = stackLocation.position - transform.position;
         direction.y = 0; // Keep rotation on the y-axis only
         Quaternion toRotation = Quaternion.LookRotation(direction);
         transform.rotation = Quaternion.RotateTowards(transform.rotation, toRotation, speed * Time.deltaTime);
+        robotAnimator.SetTrigger("Turn"); // Set the Turn trigger
+    }
+
+    // Turn the robot
+    void Turn()
+    {
+        //Debug.Log("Turning");
+        // Example turn logic (you can customize this)
+        transform.Rotate(0, 90, 0); // Rotate 90 degrees on the y-axis
         robotAnimator.SetTrigger("Turn"); // Set the Turn trigger
     }
 
@@ -165,7 +177,7 @@ public class RobotAgent : MonoBehaviour
     // Back up the robot when collision is detected
     IEnumerator BackUp(GameObject otherRobot)
     {
-        Debug.Log("Backing up");
+        //Debug.Log("Backing up");
         transform.Translate(Vector3.back * Time.deltaTime * speed);
         yield return new WaitForSeconds(backupTime); // Backup for a set duration
         isYielding = false;
