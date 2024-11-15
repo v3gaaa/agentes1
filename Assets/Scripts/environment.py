@@ -144,4 +144,5 @@ class Environment(Model):
         return [n for n in neighbors if self.is_position_free(n)]
 
     def heuristic(self, position, goal):
+        # Distancia de Manhattan
         return abs(position[0] - goal[0]) + abs(position[1] - goal[1])
