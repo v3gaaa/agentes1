@@ -4,12 +4,15 @@ using System.Collections.Generic;
 using UnityEngine.Networking;
 using Newtonsoft.Json.Linq;
 using System.Linq;
+using UnityEngine.UI; // Importar para usar elementos UI
 
 public class SimulationController : MonoBehaviour
 {
     public GameObject agentPrefab;
     public GameObject boxPrefab;
     public GameObject shelvePrefab;
+
+    public Text simulationInfoText; // Campo para mostrar información de la simulación
 
     private Dictionary<int, GameObject> agents = new Dictionary<int, GameObject>();
     private Dictionary<int, GameObject> boxes = new Dictionary<int, GameObject>();
@@ -18,6 +21,8 @@ public class SimulationController : MonoBehaviour
     private float updateInterval = 0.1f;
     private string initUrl = "http://localhost:5000/init";
     private string stateUrl = "http://localhost:5000/state";
+
+    private int totalSteps = 0; // Contador de pasos en la simulación
 
     void Start()
     {
@@ -96,18 +101,31 @@ public class SimulationController : MonoBehaviour
         }
         else
         {
+            // Update agents
             foreach (JObject agentData in data["agents"])
             {
                 int agentId = agentData["id"].Value<int>();
                 Vector3 position = new Vector3(agentData["position"][0].Value<float>(), 0, agentData["position"][1].Value<float>());
                 if (agents.ContainsKey(agentId))
                 {
-                    agents[agentId].transform.position = position;
+                    GameObject agent = agents[agentId];
+                    Vector3 previousPosition = agent.transform.position;
+
+                    // Update position
+                    agent.transform.position = position;
+
+                    // Calculate direction and rotate agent
+                    Vector3 direction = position - previousPosition;
+                    if (direction != Vector3.zero)
+                    {
+                        Quaternion targetRotation = Quaternion.LookRotation(direction);
+                        agent.transform.rotation = Quaternion.Lerp(agent.transform.rotation, targetRotation, 0.5f);
+                    }
                 }
             }
 
+            // Update boxes
             List<int> activeBoxIds = new List<int>();
-
             int boxIndex = 0;
             foreach (JObject boxData in data["boxes"])
             {
@@ -125,7 +143,6 @@ public class SimulationController : MonoBehaviour
                 boxIndex++;
             }
 
-            // Remover cajas visuales que ya no existen en la simulación
             List<int> keysToRemove = boxes.Keys.Except(activeBoxIds).ToList();
             foreach (int key in keysToRemove)
             {
@@ -133,6 +150,7 @@ public class SimulationController : MonoBehaviour
                 boxes.Remove(key);
             }
 
+            // Update shelves (apilar cajas)
             foreach (JObject shelveData in data["shelves"])
             {
                 Vector3 position = new Vector3(
@@ -157,6 +175,13 @@ public class SimulationController : MonoBehaviour
                         stackedBox.transform.SetParent(shelf.transform);
                     }
                 }
+            }
+
+            // Update simulation info
+            totalSteps++;
+            if (simulationInfoText != null)
+            {
+                simulationInfoText.text = $"Steps: {totalSteps}\nActive Boxes: {boxes.Count}\nAgents: {agents.Count}";
             }
         }
     }

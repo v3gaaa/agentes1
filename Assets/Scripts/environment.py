@@ -60,56 +60,46 @@ class Environment(Model):
     def step(self):
         for agent in self.agents:
             if not agent.carrying_box:
-                # Usar razonamiento deductivo si el agente conoce la ubicación de alguna caja
                 agent.deductive_reasoning()
-                
-                # Busca si hay una caja adyacente para recogerla
                 for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                     adjacent = (agent.position[0] + dx, agent.position[1] + dy)
                     if adjacent in self.boxes:
                         agent.pick_up_box(adjacent, self)
                         break
                 else:
-                    # Si no encuentra una caja, sigue en su dirección actual
                     agent.move_in_direction(self)
             else:
-                # Si el agente está cargando una caja, intenta encontrar una estantería disponible
                 self.move_agent_to_nearest_available_shelf(agent)
         self.record_step()
 
     def move_agent_to_nearest_available_shelf(self, agent):
-        """
-        Mueve al agente hacia la estantería más cercana que tenga espacio disponible.
-        Si todas las estanterías están llenas, el agente mantiene la caja.
-        """
         target_shelf = self.find_nearest_available_shelf(agent.position)
         if target_shelf:
             path = self.find_path_a_star(agent.position, target_shelf[0])
             if path:
                 agent.position = path[0]
-                agent.box_position = agent.position  # Actualizar la posición de la caja
-                if agent.position == target_shelf[0]:
+                agent.box_position = agent.position
+                if self.is_adjacent(agent.position, target_shelf[0]):
                     self.drop_box_on_shelf(agent, target_shelf)
 
+    def is_adjacent(self, position, shelf_position):
+        dx = abs(position[0] - shelf_position[0])
+        dy = abs(position[1] - shelf_position[1])
+        return dx + dy == 1  # Adyacente en Manhattan
+
+    def drop_box_on_shelf(self, agent, shelf):
+        if shelf[1] < 5:  # Limita a 5 cajas
+            shelf[1] += 1
+            if agent.box_position in self.boxes:
+                self.boxes.remove(agent.box_position)
+            agent.carrying_box = False
+            agent.box_position = None
+
     def find_nearest_available_shelf(self, position):
-        """
-        Encuentra la estantería más cercana que tenga menos de 5 cajas.
-        """
         available_shelves = [shelf for shelf in self.shelves if shelf[1] < 5]
         if available_shelves:
             return min(available_shelves, key=lambda shelf: self.heuristic(position, shelf[0]))
-        return None  # No hay estanterías disponibles
-
-    def drop_box_on_shelf(self, agent, shelf):
-        """
-        Permite al agente dejar una caja en la estantería si tiene menos de 5 cajas.
-        """
-        if shelf[1] < 5:  # Limita el número de cajas a 5
-            shelf[1] += 1
-            if agent.box_position in self.boxes:
-                self.boxes.remove(agent.box_position)  # Remover caja del entorno
-            agent.carrying_box = False
-            agent.box_position = None
+        return None
 
     def find_path_a_star(self, start, goal):
         open_set = []
@@ -144,5 +134,4 @@ class Environment(Model):
         return [n for n in neighbors if self.is_position_free(n)]
 
     def heuristic(self, position, goal):
-        # Distancia de Manhattan
         return abs(position[0] - goal[0]) + abs(position[1] - goal[1])
