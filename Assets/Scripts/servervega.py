@@ -1,11 +1,9 @@
-# server.py
-
 from flask import Flask, jsonify
 from environment import Environment
 
 app = Flask(__name__)
 
-# Crear el entorno y ejecutar la simulación antes de iniciar el servidor
+# Configuración inicial del entorno
 params = {
     "width": 30,
     "height": 30,
@@ -14,29 +12,26 @@ params = {
     "num_shelves": 3
 }
 
+# Crear el entorno
 env = Environment(params)
-env.run(steps=1000)  # Ejecuta la simulación por 1000 pasos
-
-# Verificación de que la simulación generó logs
-if not env.logs:
-    raise ValueError("La simulación no generó ningún log. Revisa la configuración.")
-
-current_step = 0  # Variable para llevar el seguimiento del paso actual en los logs
+env.setup()  # Asegurarse de inicializar correctamente los atributos del entorno
 
 @app.route('/init', methods=['GET'])
 def init():
-    initial_state = env.logs[0]
-    return jsonify(initial_state)
+    """
+    Devuelve las posiciones iniciales de todos los objetos para configurar la simulación en Unity.
+    """
+    env.init_positions()  # Inicializamos el entorno
+    env.record_step()  # Guardamos el primer estado
+    return jsonify(env.logs[0])  # Enviamos el estado inicial
 
 @app.route('/state', methods=['GET'])
 def get_state():
-    global current_step
-    if current_step < len(env.logs):
-        state = env.logs[current_step]
-        current_step += 1
-        return jsonify(state)
-    else:
-        return jsonify({"status": "end"})
+    """
+    Ejecuta un paso de la simulación y devuelve el estado actualizado.
+    """
+    env.step()  # Ejecutar un paso de la simulación
+    return jsonify(env.logs[-1])  # Devolver el estado más reciente
 
 if __name__ == '__main__':
     app.run(port=5000)

@@ -1,5 +1,3 @@
-# environment.py
-
 import random
 import heapq
 from agentpy import Model, AgentList
@@ -17,11 +15,12 @@ class Environment(Model):
         self.agents = AgentList(self, self.num_agents, RobotAgent)
         self.boxes = []
         self.shelves = []
-
-        self.logs = []
-        self.init_positions()
+        self.logs = []  # Aquí almacenamos los estados
 
     def init_positions(self):
+        """
+        Inicializa las posiciones de agentes, cajas y estanterías.
+        """
         for agent in self.agents:
             agent.position = self.get_random_empty_position()
             self.grid[agent.position[0]][agent.position[1]] = 1
@@ -36,6 +35,9 @@ class Environment(Model):
             self.shelves.append([position, 0])  # Cada estantería inicia con 0 cajas
 
     def get_random_empty_position(self):
+        """
+        Encuentra una posición aleatoria vacía en el grid.
+        """
         border_offset = 1
         while True:
             x = random.randint(border_offset, self.width - 1 - border_offset)
@@ -44,10 +46,16 @@ class Environment(Model):
                 return (x, y)
 
     def is_position_free(self, position):
+        """
+        Verifica si una posición está libre en el grid.
+        """
         x, y = position
         return 0 <= x < self.width and 0 <= y < self.height and self.grid[x][y] == 0
 
     def record_step(self):
+        """
+        Registra el estado actual del entorno en los logs.
+        """
         step_log = {
             "agents": [{"id": agent.id, "position": agent.position, "carrying_box": agent.carrying_box}
                        for agent in self.agents],
@@ -58,6 +66,9 @@ class Environment(Model):
         self.logs.append(step_log)
 
     def step(self):
+        """
+        Ejecuta un paso de la simulación.
+        """
         for agent in self.agents:
             if not agent.carrying_box:
                 agent.deductive_reasoning()
@@ -73,6 +84,9 @@ class Environment(Model):
         self.record_step()
 
     def move_agent_to_nearest_available_shelf(self, agent):
+        """
+        Mueve al agente hacia la estantería más cercana con espacio disponible.
+        """
         target_shelf = self.find_nearest_available_shelf(agent.position)
         if target_shelf:
             path = self.find_path_a_star(agent.position, target_shelf[0])
@@ -88,7 +102,10 @@ class Environment(Model):
         return dx + dy == 1  # Adyacente en Manhattan
 
     def drop_box_on_shelf(self, agent, shelf):
-        if shelf[1] < 5:  # Limita a 5 cajas
+        """
+        Permite al agente dejar una caja en la estantería si hay espacio disponible.
+        """
+        if shelf[1] < 5:
             shelf[1] += 1
             if agent.box_position in self.boxes:
                 self.boxes.remove(agent.box_position)
@@ -96,12 +113,18 @@ class Environment(Model):
             agent.box_position = None
 
     def find_nearest_available_shelf(self, position):
+        """
+        Encuentra la estantería más cercana que tenga menos de 5 cajas.
+        """
         available_shelves = [shelf for shelf in self.shelves if shelf[1] < 5]
         if available_shelves:
             return min(available_shelves, key=lambda shelf: self.heuristic(position, shelf[0]))
         return None
 
     def find_path_a_star(self, start, goal):
+        """
+        Implementa el algoritmo A* para encontrar el camino más corto.
+        """
         open_set = []
         heapq.heappush(open_set, (0, start))
         came_from = {}
@@ -122,6 +145,9 @@ class Environment(Model):
         return []
 
     def reconstruct_path(self, came_from, current):
+        """
+        Reconstruye el camino desde el nodo objetivo hasta el inicio.
+        """
         path = []
         while current in came_from:
             path.insert(0, current)
@@ -129,9 +155,15 @@ class Environment(Model):
         return path
 
     def get_neighbors(self, position):
+        """
+        Devuelve los vecinos válidos de una posición.
+        """
         x, y = position
         neighbors = [(x, y - 1), (x, y + 1), (x - 1, y), (x + 1, y)]
         return [n for n in neighbors if self.is_position_free(n)]
 
     def heuristic(self, position, goal):
+        """
+        Calcula la distancia de Manhattan entre dos posiciones.
+        """
         return abs(position[0] - goal[0]) + abs(position[1] - goal[1])
