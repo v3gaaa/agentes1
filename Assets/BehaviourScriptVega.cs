@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine.Networking;
 using Newtonsoft.Json.Linq;
 using System.Linq;
-using UnityEngine.UI; // Importar para usar elementos UI
+using UnityEngine.UI;
 
 public class SimulationController : MonoBehaviour
 {
@@ -12,7 +12,7 @@ public class SimulationController : MonoBehaviour
     public GameObject boxPrefab;
     public GameObject shelvePrefab;
 
-    public Text simulationInfoText; // Campo para mostrar información de la simulación
+    public Text simulationInfoText;
 
     private Dictionary<int, GameObject> agents = new Dictionary<int, GameObject>();
     private Dictionary<int, GameObject> boxes = new Dictionary<int, GameObject>();
@@ -21,8 +21,9 @@ public class SimulationController : MonoBehaviour
     private float updateInterval = 0.1f;
     private string initUrl = "http://localhost:5000/init";
     private string stateUrl = "http://localhost:5000/state";
+    private string acknowledgeUrl = "http://localhost:5000/acknowledge";
 
-    private int totalSteps = 0; // Contador de pasos en la simulación
+    private int totalSteps = 0;
 
     void Start()
     {
@@ -57,6 +58,9 @@ public class SimulationController : MonoBehaviour
                 if (request.result == UnityWebRequest.Result.Success)
                 {
                     ProcessServerData(request.downloadHandler.text, false);
+
+                    // Enviar confirmación al servidor
+                    StartCoroutine(SendAcknowledgment(totalSteps));
                 }
                 else
                 {
@@ -111,10 +115,8 @@ public class SimulationController : MonoBehaviour
                     GameObject agent = agents[agentId];
                     Vector3 previousPosition = agent.transform.position;
 
-                    // Update position
                     agent.transform.position = position;
 
-                    // Calculate direction and rotate agent
                     Vector3 direction = position - previousPosition;
                     if (direction != Vector3.zero)
                     {
@@ -150,7 +152,7 @@ public class SimulationController : MonoBehaviour
                 boxes.Remove(key);
             }
 
-            // Update shelves (apilar cajas)
+            // Update shelves
             foreach (JObject shelveData in data["shelves"])
             {
                 Vector3 position = new Vector3(
@@ -182,6 +184,30 @@ public class SimulationController : MonoBehaviour
             if (simulationInfoText != null)
             {
                 simulationInfoText.text = $"Steps: {totalSteps}\nActive Boxes: {boxes.Count}\nAgents: {agents.Count}";
+            }
+        }
+    }
+
+    IEnumerator SendAcknowledgment(int step)
+    {
+        JObject acknowledgment = new JObject();
+        acknowledgment["step"] = step;
+
+        using (UnityWebRequest request = UnityWebRequest.PostWwwForm(acknowledgeUrl, acknowledgment.ToString()))
+        {
+            byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(acknowledgment.ToString());
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError("Error sending acknowledgment: " + request.error);
+            }
+            else
+            {
+                Debug.Log($"Acknowledgment sent for step {step}");
             }
         }
     }

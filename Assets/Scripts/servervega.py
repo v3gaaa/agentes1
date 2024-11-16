@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from environment import Environment
 
 app = Flask(__name__)
@@ -16,6 +16,9 @@ params = {
 env = Environment(params)
 env.setup()  # Asegurarse de inicializar correctamente los atributos del entorno
 
+# Variable para rastrear confirmaciones
+acknowledgements = []
+
 @app.route('/init', methods=['GET'])
 def init():
     """
@@ -32,6 +35,19 @@ def get_state():
     """
     env.step()  # Ejecutar un paso de la simulación
     return jsonify(env.logs[-1])  # Devolver el estado más reciente
+
+@app.route('/acknowledge', methods=['POST'])
+def acknowledge():
+    """
+    Recibe confirmaciones de Unity sobre la recepción del estado.
+    """
+    data = request.json
+    if "step" in data:
+        acknowledgements.append(data["step"])
+        print(f"Received acknowledgment for step {data['step']}")
+        return jsonify({"status": "received"}), 200
+    else:
+        return jsonify({"error": "Invalid data"}), 400
 
 if __name__ == '__main__':
     app.run(port=5000)
