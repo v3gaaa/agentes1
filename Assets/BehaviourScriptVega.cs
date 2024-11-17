@@ -80,8 +80,8 @@ public class SimulationController : MonoBehaviour
             if (stepCounter % 5 == 0)
             {
                 // Definir una resolución rectangular para la imagen
-                int imageWidth = 1920; // Ancho deseado (16)
-                int imageHeight = 1080; // Altura deseada (9)
+                int imageWidth = 960; // Ancho deseado (16)
+                int imageHeight = 540; // Altura deseada (9)
 
                 foreach (var agentCamera in agentCameras)
                 {
