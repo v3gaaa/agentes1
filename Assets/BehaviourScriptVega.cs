@@ -79,34 +79,46 @@ public class SimulationController : MonoBehaviour
 
             if (stepCounter % 5 == 0)
             {
+                // Definir una resolución rectangular para la imagen
+                int imageWidth = 1920; // Ancho deseado (16)
+                int imageHeight = 1080; // Altura deseada (9)
+
                 foreach (var agentCamera in agentCameras)
                 {
                     int agentId = agentCamera.Key;
-                    
+
                     if (!agentCarryingStatus[agentId])
                     {
                         UnityEngine.Camera camera = agentCamera.Value;
 
-                        RenderTexture renderTexture = new RenderTexture(256, 256, 24);
+                        // Crear un RenderTexture rectangular
+                        RenderTexture renderTexture = new RenderTexture(imageWidth, imageHeight, 24);
                         camera.targetTexture = renderTexture;
-                        
-                        Texture2D texture = new Texture2D(256, 256, TextureFormat.RGB24, false);
+
+                        // Crear un Texture2D con la misma resolución
+                        Texture2D texture = new Texture2D(imageWidth, imageHeight, TextureFormat.RGB24, false);
                         camera.Render();
+
+                        // Leer los píxeles del RenderTexture y aplicarlos al Texture2D
                         RenderTexture.active = renderTexture;
-                        texture.ReadPixels(new Rect(0, 0, 256, 256), 0, 0);
+                        texture.ReadPixels(new Rect(0, 0, imageWidth, imageHeight), 0, 0);
                         texture.Apply();
-                        
+
+                        // Limpieza del RenderTexture
                         camera.targetTexture = null;
                         RenderTexture.active = null;
                         Destroy(renderTexture);
 
+                        // Convertir la imagen a formato PNG
                         byte[] imageBytes = texture.EncodeToPNG();
                         Destroy(texture);
 
+                        // Enviar la imagen al servidor
                         yield return StartCoroutine(SendImageToServer(agentId, imageBytes));
                     }
                 }
             }
+
 
             using (UnityWebRequest request = UnityWebRequest.Get(stateUrl))
             {
