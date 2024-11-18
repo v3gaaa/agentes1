@@ -90,5 +90,13 @@ def upload_image():
 
     return jsonify({"status": "Image received and processing started"}), 200
 
+@app.route('/check-shelves', methods=['GET'])
+def check_shelves():
+    all_shelves_full = all(shelf[1] == 5 for shelf in env.shelves)
+    return jsonify({
+        "all_full": all_shelves_full,
+        "shelves": [{"position": shelf[0], "box_count": shelf[1]} for shelf in env.shelves]
+    })
+
 if __name__ == '__main__':
     app.run(port=5000)
