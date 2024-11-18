@@ -1,88 +1,122 @@
-import agentpy as ap
-import random
-import math
-from flask import Flask, jsonify, request
+import os
+from flask import Flask, request, jsonify
+from environment import Environment
+from inference_sdk import InferenceHTTPClient
+import threading
 
 app = Flask(__name__)
 
-class WarehouseAgent(ap.Agent):
-    def setup(self):
-        self.object_count = 0
-        self.is_carrying_object = False
-        self.current_position = self.model.random_position()
-        self.target_position = None
+# Configuración inicial del entorno
+params = {
+    "width": 30,
+    "height": 30,
+    "num_agents": 5,
+    "num_boxes": 15,
+    "num_shelves": 3
+}
 
-    def step(self):
-        if not self.is_carrying_object:
-            self.find_closest_object()
-        if self.is_carrying_object:
-            self.move_towards_target()
+# Crear el entorno
+env = Environment(params)
+env.setup()
 
-    def find_closest_object(self):
-        closest_distance = float('inf')
-        for obj in self.model.objects:
-            distance = self.distance_to(obj)
-            if distance < closest_distance:
-                closest_distance = distance
-                self.target_position = obj['position']
-        if self.target_position:
-            self.is_carrying_object = True
-            print(f"Agent {self.id} found an object at {self.target_position}")
+# Crear carpeta para guardar imágenes
+if not os.path.exists("images"):
+    os.makedirs("images")
 
-    def move_towards_target(self):
-        if self.target_position:
-            self.current_position = self.target_position
-            self.is_carrying_object = False
-            self.object_count += 1
-            print(f"Agent {self.id} moved to {self.target_position} and picked up an object")
+# Configurar cliente de YOLO
+CLIENT = InferenceHTTPClient(
+    api_url="https://detect.roboflow.com",
+    api_key="5Pdz8tW7hi78Qf6oXAQt"
+)
 
-    def distance_to(self, obj):
-        return math.sqrt((self.current_position[0] - obj['position'][0])**2 +
-                         (self.current_position[1] - obj['position'][1])**2 +
-                         (self.current_position[2] - obj['position'][2])**2)
+@app.route('/init', methods=['GET'])
+def init():
+    env.init_positions()
+    env.record_step()
+    return jsonify(env.logs[0])
 
-class WarehouseModel(ap.Model):
-    def setup(self):
-        self.objects = [{'id': i, 'position': [random.randint(0, 10), random.randint(0, 10), 0], 'count': 0} for i in range(10)]
-        self.agents = ap.AgentList(self, 5, WarehouseAgent)
+@app.route('/state', methods=['GET'])
+def get_state():
+    env.step()
+    return jsonify(env.logs[-1])
 
-    def step(self):
-        self.agents.step()
+def process_image(agent_index, image_path):
+    try:
+        result = CLIENT.infer(image_path, model_id="boxfinder-6vsft/1")
+        detections = result["predictions"]
+        
+        num_boxes = len(detections)
+        
+        # Store the detection information for the agent
+        agent = env.agents[agent_index]
+        agent.last_detection = {
+            'num_boxes': num_boxes,
+            'confidence': max([d.get('confidence', 0) for d in detections]) * 100 if detections else 0
+        }
+        
+        # Process detections as before
+        for detection in detections:
+            x_center = detection["x"]
+            y_center = detection["y"]
+            grid_x = int(agent.position[0] + (x_center / 960) - 0.5)
+            grid_y = int(agent.position[1] + (y_center / 540) - 0.5)
+            
+            if (grid_x, grid_y) not in agent.known_boxes:
+                agent.known_boxes.append((grid_x, grid_y))
+        
+        return num_boxes
+        
+    except Exception as e:
+        print(f"Error processing image: {e}")
+        return 0
 
-@app.route('/setup', methods=['GET'])
-def setup():
-    global model
-    model = WarehouseModel()
-    model.setup()
-    return jsonify({'agents': 5, 'objects': len(model.objects)})
+@app.route('/upload-image', methods=['PUT'])
+def upload_image():
+    agent_id = request.headers.get("Agent-Id")
+    if not agent_id:
+        return jsonify({"error": "Agent-Id header missing"}), 400
 
-@app.route('/step', methods=['POST'])
-def step():
-    model.step()
-    return jsonify({'agents': [agent.object_count for agent in model.agents],
-                    'objects': model.objects})
+    # Convert agent_id to zero-based index
+    agent_index = int(agent_id) - 1
+    
+    # Validate agent index
+    if agent_index < 0 or agent_index >= len(env.agents):
+        return jsonify({"error": f"Invalid agent ID: {agent_id}"}), 400
 
-@app.route('/next_action', methods=['GET'])
-def next_action():
-    # Determine the next action for the robot
-    # This is a simplified example, you can implement more complex logic
-    actions = ["move_forward", "rotate", "stop", "resume", "turn"]
-    action = random.choice(actions)
-    return jsonify(action)
+    image_data = request.data
+    if not image_data:
+        return jsonify({"error": "No image data received"}), 400
 
-@app.route('/robot/pickup', methods=['POST'])
-def robot_pickup():
-    data = request.json
-    robot_id = data['robot_id']
-    print(f"Robot {robot_id} picks up object")
-    return jsonify({"status": "success", "action": "pickup"})
+    # Guardar la imagen en la carpeta "images"
+    image_path = f"images/agent_{agent_id}_step_{len(env.logs)}.png"
+    with open(image_path, "wb") as f:
+        f.write(image_data)
 
-@app.route('/robot/drop', methods = ['POST'])
-def robot_drop():
-    data = request.json
-    robot_id = data['robot_id']
-    print(f"Robot {robot_id} drops object")
-    return jsonify({"status": "success", "action": "drop"})
+    # Procesar la imagen en un hilo separado
+    threading.Thread(target=process_image, args=(agent_index, image_path)).start()
+
+    return jsonify({"status": "Image received and processing started"}), 200
+  
+@app.route('/check-shelves', methods=['GET'])
+def check_shelves():
+    all_shelves_full = all(shelf[1] == 5 for shelf in env.shelves)
+    return jsonify({
+        "all_full": all_shelves_full,
+        "shelves": [{"position": shelf[0], "box_count": shelf[1]} for shelf in env.shelves]
+    })
+
+@app.route('/detections', methods=['GET'])
+def get_detections():
+    detections = []
+    for agent_index, agent in enumerate(env.agents):
+        if hasattr(agent, 'last_detection'):
+            detections.append({
+                'agentId': agent_index + 1,
+                'numBoxes': agent.last_detection.get('num_boxes', 0),
+                'position': list(agent.position),
+                'confidence': agent.last_detection.get('confidence', 0)
+            })
+    return jsonify(detections)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(port=5000)
