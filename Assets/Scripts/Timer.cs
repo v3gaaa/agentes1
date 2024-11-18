@@ -11,7 +11,6 @@ public class Timer : MonoBehaviour
     bool isTimerRunning = true;
     string serverUrl = "http://localhost:5000";
     float checkInterval = 1f; 
-    float nextCheckTime = 0f;
 
     void Start()
     {
